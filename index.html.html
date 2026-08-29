@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система обліку договорів — КП «БЛАГОУСТРІЙ»</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .toast { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; }
+        .card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+        .card-hover:hover { transform: translateY(-2px); }
+        .drawer { transition: transform 0.3s ease-in-out; }
+        .sticky-header th { position: sticky; top: 0; z-index: 10; }
+    </style>
+</head>
+<body class="bg-slate-100/70 min-h-screen font-sans text-slate-800 antialiased">
+    <!-- Спливаючі сповіщення -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <!-- Модальне вікно підтвердження видалення -->
+    <div id="deleteModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-100">
+            <div class="flex items-center gap-3.5 text-rose-600">
+                <div class="p-3 bg-rose-50 rounded-xl">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">Підтвердження видалення</h3>
+            </div>
+            <p class="text-sm text-slate-600 leading-relaxed">Ви дійсно бажаєте видалити цей договір? Цю дію неможливо скасувати.</p>
+            <div class="flex justify-end gap-3 pt-2">
+                <button onclick="closeDeleteModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition">
+                    Скасувати
+                </button>
+                <button id="confirmDeleteBtn" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-semibold transition shadow-md shadow-rose-600/20">
+                    Видалити
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Висувна панель швидкого перегляду (Drawer) -->
+    <div id="drawerOverlay" onclick="closeDrawer()" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 hidden"></div>
+    <div id="detailDrawer" class="fixed top-0 right-0 h-full w-full max-w-md bg-white z-50 shadow-2xl transform translate-x-full drawer flex flex-col">
+        <div class="p-6 bg-slate-900 text-white flex justify-between items-center border-b-4 border-emerald-500">
+            <div>
+                <span id="drawerDk" class="text-xs font-mono bg-emerald-800 text-emerald-200 px-2 py-0.5 rounded"></span>
+                <h3 id="drawerNumber" class="text-lg font-extrabold mt-1"></h3>
+            </div>
+            <button onclick="closeDrawer()" class="text-slate-400 hover:text-white p-2 rounded-lg text-xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div id="drawerContent" class="p-6 space-y-5 overflow-y-auto flex-1 text-sm text-slate-700"></div>
+    </div>
+
+    <!-- Шапка з логотипом -->
+    <header class="bg-slate-900 text-white shadow-xl mb-8 border-b-4 border-emerald-500">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-4">
+                <div class="bg-white p-1 rounded-full shadow-lg flex items-center justify-center w-16 h-16 shrink-0 border-2 border-sky-400 overflow-hidden transition transform hover:scale-105">
+                    <svg viewBox="0 0 200 200" class="w-full h-full">
+                      <circle cx="100" cy="100" r="90" fill="none" stroke="#005B82" stroke-width="8"/>
+                      <path d="M 17 118 C 50 85, 140 100, 183 118 A 90 90 0 0 1 100 190 A 90 90 0 0 1 17 118 Z" fill="#2B83B3"/>
+                      <path d="M 30 128 C 70 100, 130 115, 170 125" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+                      <path d="M 45 148 C 80 125, 125 135, 155 145" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+                      <path d="M 28 122 V 93 H 44 V 122 M 44 122 V 75 H 62 V 122 M 62 122 V 96 H 80 V 108 H 92 V 122" fill="none" stroke="#005B82" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>
+                      <path d="M 108 122 V 108 H 120 V 93 L 140 108 V 122 M 140 122 V 64 L 163 100 V 122 M 163 122 V 102 H 173 V 122" fill="none" stroke="#005B82" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>
+                      <path d="M 100 128 V 75" stroke="#509E38" stroke-width="6" stroke-linecap="round"/>
+                      <path d="M 100 70 L 90 73 L 70 52 L 78 50 L 53 38 L 68 38 L 58 20 L 80 28 L 100 5 L 120 28 L 142 20 L 132 38 L 147 38 L 122 50 L 130 52 L 110 73 Z" fill="#509E38" stroke="#509E38" stroke-width="2" stroke-linejoin="round"/>
+                      <path d="M 100 65 L 82 42 M 100 65 L 118 42 M 100 45 L 85 30 M 100 45 L 115 30 M 100 70 V 10" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-wide leading-tight text-white">КП «БЛАГОУСТРІЙ»</h1>
+                    <p class="text-xs text-slate-400 font-medium">Новодонецької селищної ради • Система обліку договорів</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+                <button onclick="exportToCSV()" title="Завантажити у форматі CSV/Excel" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition flex items-center gap-2 shadow-md shadow-emerald-900/20 active:scale-95">
+                    <i class="fa-solid fa-file-excel"></i> Excel (CSV)
+                </button>
+                <button onclick="loadFromGoogleSheets()" title="Синхронізувати з хмарою" class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl transition flex items-center gap-2 shadow-md active:scale-95">
+                    <i class="fa-solid fa-rotate"></i> Синхронізація
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 space-y-8">
+        <!-- Індикатор завантаження з хмари -->
+        <div id="loadingOverlay" class="hidden bg-sky-50 border border-sky-200 p-4 rounded-xl flex items-center justify-center gap-3 text-sky-800 text-sm font-semibold">
+            <i class="fa-solid fa-spinner fa-spin text-lg"></i> Завантаження / Збереження даних у Google Таблиці...
+        </div>
+
+        <!-- Статистика -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-center justify-between card-hover">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Усього договорів</p>
+                    <p id="statTotal" class="text-3xl font-black text-slate-800 mt-1">0</p>
+                </div>
+                <div class="p-3.5 bg-sky-50 text-sky-600 rounded-2xl">
+                    <i class="fa-solid fa-folder-open text-2xl"></i>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-center justify-between card-hover">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Діючі</p>
+                    <p id="statActive" class="text-3xl font-black text-emerald-600 mt-1">0</p>
+                </div>
+                <div class="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl">
+                    <i class="fa-solid fa-circle-check text-2xl"></i>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-center justify-between card-hover">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">На підписанні</p>
+                    <p id="statPending" class="text-3xl font-black text-amber-500 mt-1">0</p>
+                </div>
+                <div class="p-3.5 bg-amber-50 text-amber-500 rounded-2xl">
+                    <i class="fa-solid fa-hourglass-half text-2xl"></i>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex items-center justify-between card-hover">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Загальна сума</p>
+                    <p id="statSum" class="text-2xl font-black text-slate-800 mt-1">0 грн</p>
+                </div>
+                <div class="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl">
+                    <i class="fa-solid fa-wallet text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Інтегрований Блок моніторингу лімітів за кодами ДК -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                <h2 class="text-lg font-extrabold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie text-emerald-600"></i> Моніторинг лімітів за кодами ДК 021:2015
+                </h2>
+                <span class="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-xl font-bold border border-slate-200">
+                    Порогова сума: 100 000.00 грн
+                </span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                            <th class="p-3">Код ДК 021:2015</th>
+                            <th class="p-3">Кількість договорів</th>
+                            <th class="p-3">Загальна сума</th>
+                            <th class="p-3">Прогрес до 100 тис. грн</th>
+                            <th class="p-3">Статус ліміту</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dkLimitsTable" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Форма -->
+            <div class="lg:col-span-1">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 sticky top-6">
+                    <h2 id="formTitle" class="text-lg font-extrabold text-slate-800 mb-5 pb-3 border-b border-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-plus-circle text-emerald-600"></i> Додати новий договір
+                    </h2>
+                    <form id="contractForm" class="space-y-4">
+                        <input type="hidden" id="editIndex" value="-1">
+                        
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Номер договору *</label>
+                            <input type="text" id="number" required placeholder="Напр. № 102/2026" 
+                                   class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Код ДК 021:2015 *</label>
+                            <input type="text" id="dkCode" required placeholder="Напр. 90510000-5" pattern="\d{8}-\d" title="Формат коду: 8 цифр, дефіс, 1 цифра" oninput="checkDkLimitLive()"
+                                   class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Сума (грн) *</label>
+                            <input type="number" step="0.01" id="amount" required placeholder="0.00" oninput="checkDkLimitLive()"
+                                   class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                        </div>
+
+                        <div id="limitAlert" class="hidden p-3 rounded-xl text-xs space-y-1"></div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Контрагент *</label>
+                            <input type="text" id="counterparty" required placeholder="ТОВ «Автодор»" 
+                                   class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Дата початку *</label>
+                                <input type="date" id="startDate" required 
+                                       class="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Кінцевий термін *</label>
+                                <input type="date" id="endDate" required 
+                                       class="w-full px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Статус *</label>
+                            <select id="status" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                                <option value="Діє">Діє</option>
+                                <option value="На підписанні">На підписанні</option>
+                                <option value="Завершено">Завершено</option>
+                                <option value="Розірвано">Розірвано</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Посилання на скан-копію</label>
+                            <input type="url" id="link" placeholder="https://drive.google.com/..." 
+                                   class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5 uppercase">Предмет договору / Примітка</label>
+                            <textarea id="notes" rows="2" placeholder="Послуги з вивозу сміття, ремонт..." 
+                                      class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm outline-none transition bg-slate-50/50"></textarea>
+                        </div>
+
+                        <div class="flex gap-2 pt-2">
+                            <button type="submit" id="submitBtn" 
+                                    class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 text-sm active:scale-95">
+                                <i class="fa-solid fa-save"></i> Зберегти
+                            </button>
+                            <button type="button" id="cancelBtn" onclick="resetForm()" 
+                                    class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold py-3 px-4 rounded-xl transition text-sm">
+                                Скасувати
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Список договорів -->
+            <div class="lg:col-span-2 space-y-4">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col gap-4">
+                    <div class="flex flex-col md:flex-row gap-3 justify-between items-center">
+                        <div class="relative w-full md:w-1/2">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-400 text-sm"></i>
+                            <input type="text" id="searchInput" oninput="onFilterChange()" placeholder="Пошук (номер, ДК, контрагент)..." 
+                                   class="w-full pl-10 pr-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition bg-slate-50/50">
+                        </div>
+                        
+                        <div class="w-full md:w-auto flex gap-2">
+                            <select id="filterYear" onchange="onFilterChange()" class="w-full md:w-auto px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition bg-slate-50/50">
+                                <option value="Усі">Усі роки</option>
+                            </select>
+
+                            <select id="filterStatus" onchange="onFilterChange()" class="w-full md:w-auto px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition bg-slate-50/50">
+                                <option value="Усі">Усі статуси</option>
+                                <option value="Діє">Діє</option>
+                                <option value="На підписанні">На підписанні</option>
+                                <option value="Завершено">Завершено</option>
+                                <option value="Розірвано">Розірвано</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-100 items-center">
+                        <span class="text-xs font-bold text-slate-400 mr-1"><i class="fa-solid fa-bolt text-amber-500"></i> Швидкий фільтр:</span>
+                        <button onclick="setQuickFilter('all')" id="qf-all" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 text-white transition">Усі</button>
+                        <button onclick="setQuickFilter('expired')" id="qf-expired" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-700 transition">Прострочені</button>
+                        <button onclick="setQuickFilter('expiring')" id="qf-expiring" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-amber-100 hover:text-amber-700 transition">Завершуються (30 дн)</button>
+                        <button onclick="setQuickFilter('nofile')" id="qf-nofile" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-sky-100 hover:text-sky-700 transition">Без файла</button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+                    <div class="overflow-x-auto max-h-[600px]">
+                        <table class="w-full text-left border-collapse sticky-header">
+                            <thead>
+                                <tr class="bg-slate-100/90 backdrop-blur-md border-b border-slate-200/80 text-slate-500 text-[11px] font-extrabold uppercase tracking-wider select-none">
+                                    <th class="p-4 cursor-pointer hover:bg-slate-200/50 transition" onclick="toggleSort('number')">
+                                        № / ДК <i id="sortIcon-number" class="fa-solid fa-sort ml-1"></i>
+                                    </th>
+                                    <th class="p-4 cursor-pointer hover:bg-slate-200/50 transition" onclick="toggleSort('counterparty')">
+                                        Контрагент <i id="sortIcon-counterparty" class="fa-solid fa-sort ml-1"></i>
+                                    </th>
+                                    <th class="p-4 cursor-pointer hover:bg-slate-200/50 transition" onclick="toggleSort('amount')">
+                                        Сума <i id="sortIcon-amount" class="fa-solid fa-sort ml-1"></i>
+                                    </th>
+                                    <th class="p-4 cursor-pointer hover:bg-slate-200/50 transition" onclick="toggleSort('endDate')">
+                                        Період / Термін <i id="sortIcon-endDate" class="fa-solid fa-sort ml-1"></i>
+                                    </th>
+                                    <th class="p-4">Статус</th>
+                                    <th class="p-4 text-right">Дії</th>
+                                </tr>
+                            </thead>
+                            <tbody id="contractTable" class="divide-y divide-slate-100 text-sm"></tbody>
+                            <tfoot>
+                                <tr class="bg-slate-50/90 font-bold border-t-2 border-slate-200 text-slate-800 text-xs">
+                                    <td colspan="2" class="p-3.5 text-right uppercase tracking-wider text-slate-500">Загальна сума у фільтрі:</td>
+                                    <td id="filteredSum" class="p-3.5 text-emerald-700 font-extrabold text-sm">0,00 грн</td>
+                                    <td colspan="3" class="p-3.5"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div id="emptyState" class="hidden p-12 text-center text-slate-400">
+                        <i class="fa-regular fa-folder-open text-5xl mb-3 text-slate-300"></i>
+                        <p class="font-medium text-base">Договорів не знайдено</p>
+                    </div>
+
+                    <div id="paginationBar" class="p-4 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+                        <div class="flex items-center gap-2">
+                            <span>Показувати:</span>
+                            <select id="pageSizeSelect" onchange="onPageSizeChange()" class="px-2 py-1 border border-slate-300 rounded-lg bg-white font-semibold outline-none">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="1000">Усі</option>
+                            </select>
+                            <span id="resultCountInfo" class="ml-2 font-semibold text-slate-500"></span>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <button id="prevPageBtn" onclick="changePage(-1)" class="px-3 py-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition">
+                                <i class="fa-solid fa-chevron-left mr-1"></i> Назад
+                            </button>
+                            <span id="pageInfo" class="font-bold text-slate-700">Сторінка 1 з 1</span>
+                            <button id="nextPageBtn" onclick="changePage(1)" class="px-3 py-1.5 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition">
+                                Вперед <i class="fa-solid fa-chevron-right ml-1"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // !!! ВСТАВТЕ СЮДИ ПОСИЛАННЯ З КРОКУ 1 !!!
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/ВАШ_ІДЕНТИФІКАТОР/exec';
+
+        const LIMIT_THRESHOLD = 100000;
+        let contracts = [];
+        let currentPage = 1;
+        let pageSize = 10;
+        let activeQuickFilter = 'all';
+        let sortKey = 'startDate';
+        let sortAsc = false;
+        let deletingTargetIndex = -1;
+
+        function showLoading(show) {
+            const overlay = document.getElementById('loadingOverlay');
+            if (show) overlay.classList.remove('hidden');
+            else overlay.classList.add('hidden');
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-slate-800';
+            toast.className = `${bgClass} text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 toast opacity-0 transform translate-y-2`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'} text-sm"></i> ${escapeHtml(message)}`;
+            
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-2'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        async function loadFromGoogleSheets() {
+            showLoading(true);
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL);
+                const data = await res.json();
+                contracts = data;
+                updateStats();
+                updateYearFilter();
+                renderContracts();
+                renderDkLimits();
+                showToast('Дані успішно завантажено з Google Таблиці');
+            } catch (err) {
+                showToast('Помилка при зчитуванні даних з хмари', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function saveContractsToGoogleSheets() {
+            showLoading(true);
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(contracts)
+                });
+                updateStats();
+                updateYearFilter();
+                renderContracts();
+                renderDkLimits();
+                showToast('Дані збережено в Google Таблицю');
+            } catch (err) {
+                showToast('Помилка збереження в хмару', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').innerText = contracts.length;
+            document.getElementById('statActive').innerText = contracts.filter(c => c.status === 'Діє').length;
+            document.getElementById('statPending').innerText = contracts.filter(c => c.status === 'На підписанні').length;
+            const totalSum = contracts.reduce((acc, c) => acc + (parseFloat(c.amount) || 0), 0);
+            document.getElementById('statSum').innerText = totalSum.toLocaleString('uk-UA', { minimumFractionDigits: 2 }) + ' грн';
+        }
+
+        function renderDkLimits() {
+            const tbody = document.getElementById('dkLimitsTable');
+            tbody.innerHTML = '';
+
+            const grouped = {};
+            contracts.forEach(c => {
+                const dk = c.dkCode ? c.dkCode.trim() : 'Не вказано';
+                if (!grouped[dk]) grouped[dk] = { count: 0, total: 0 };
+                grouped[dk].count++;
+                grouped[dk].total += parseFloat(c.amount) || 0;
+            });
+
+            const keys = Object.keys(grouped);
+            if (keys.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400 italic">Немає договорів для розрахунку лімітів</td></tr>`;
+                return;
+            }
+
+            keys.forEach(dk => {
+                const item = grouped[dk];
+                const percent = Math.min(Math.round((item.total / LIMIT_THRESHOLD) * 100), 100);
+                
+                let statusBadge = '';
+                let progressColor = 'bg-emerald-500';
+
+                if (item.total > LIMIT_THRESHOLD) {
+                    statusBadge = `<span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-100 text-rose-700 border border-rose-200"><i class="fa-solid fa-triangle-exclamation"></i> Перевищено (>100k)</span>`;
+                    progressColor = 'bg-rose-500';
+                } else if (item.total >= LIMIT_THRESHOLD * 0.8) {
+                    statusBadge = `<span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-700 border border-amber-200"><i class="fa-solid fa-triangle-exclamation"></i> Увага (80%+)</span>`;
+                    progressColor = 'bg-amber-500';
+                } else {
+                    statusBadge = `<span class="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-check"></i> В нормі</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-mono font-bold text-slate-800">${escapeHtml(dk)}</td>
+                    <td class="p-3 text-slate-600">${item.count} дог.</td>
+                    <td class="p-3 font-bold ${item.total > LIMIT_THRESHOLD ? 'text-rose-600' : 'text-slate-800'}">${item.total.toLocaleString('uk-UA', {minimumFractionDigits: 2})} грн</td>
+                    <td class="p-3 w-48">
+                        <div class="flex items-center gap-2">
+                            <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                <div class="${progressColor} h-full" style="width: ${percent}%"></div>
+                            </div>
+                            <span class="text-xs text-slate-500 font-bold">${percent}%</span>
+                        </div>
+                    </td>
+                    <td class="p-3">${statusBadge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function checkDkLimitLive() {
+            const dk = document.getElementById('dkCode').value.trim();
+            const amount = parseFloat(document.getElementById('amount').value) || 0;
+            const editIdx = parseInt(document.getElementById('editIndex').value);
+            const alertBox = document.getElementById('limitAlert');
+
+            if (!dk) {
+                alertBox.classList.add('hidden');
+                return;
+            }
+
+            const currentSum = contracts
+                .filter((c, idx) => c.dkCode === dk && idx !== editIdx)
+                .reduce((sum, c) => sum + (parseFloat(c.amount) || 0), 0);
+
+            const newTotal = currentSum + amount;
+            alertBox.classList.remove('hidden');
+
+            if (newTotal > LIMIT_THRESHOLD) {
+                alertBox.className = "p-3 rounded-xl text-xs bg-rose-50 border border-rose-200 text-rose-800 space-y-0.5";
+                alertBox.innerHTML = `
+                    <div class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation text-rose-600"></i> Увага! Перевищення ліміту!</div>
+                    <div>Поточна сума по ДК <b>${escapeHtml(dk)}</b>: ${currentSum.toLocaleString('uk-UA')} грн.</div>
+                    <div>Після додавання буде: <b>${newTotal.toLocaleString('uk-UA')} грн</b> (поріг перевищено на ${(newTotal - LIMIT_THRESHOLD).toLocaleString('uk-UA')} грн).</div>
+                `;
+            } else if (newTotal >= LIMIT_THRESHOLD * 0.8) {
+                alertBox.className = "p-3 rounded-xl text-xs bg-amber-50 border border-amber-200 text-amber-800 space-y-0.5";
+                alertBox.innerHTML = `
+                    <div class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-circle-exclamation text-amber-600"></i> Наближення до ліміту</div>
+                    <div>Сума по ДК <b>${escapeHtml(dk)}</b> складе <b>${newTotal.toLocaleString('uk-UA')} грн</b> з 100 000 грн.</div>
+                `;
+            } else {
+                alertBox.className = "p-3 rounded-xl text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 space-y-0.5";
+                alertBox.innerHTML = `
+                    <div class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-shield-check text-emerald-600"></i> У межах ліміту</div>
+                    <div>Сума по ДК <b>${escapeHtml(dk)}</b> складе <b>${newTotal.toLocaleString('uk-UA')} грн</b>. Залишок: ${(LIMIT_THRESHOLD - newTotal).toLocaleString('uk-UA')} грн.</div>
+                `;
+            }
+        }
+
+        function updateYearFilter() {
+            const yearSelect = document.getElementById('filterYear');
+            const currentSelected = yearSelect.value;
+            const years = new Set();
+            contracts.forEach(c => { if (c.startDate) years.add(new Date(c.startDate).getFullYear()); });
+
+            yearSelect.innerHTML = '<option value="Усі">Усі роки</option>';
+            Array.from(years).sort((a, b) => b - a).forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.innerText = y + ' рік';
+                if (y.toString() === currentSelected) opt.selected = true;
+                yearSelect.appendChild(opt);
+            });
+        }
+
+        function getDaysUntilEnd(endDateStr) {
+            if (!endDateStr) return null;
+            const today = new Date(); today.setHours(0,0,0,0);
+            return Math.ceil((new Date(endDateStr) - today) / (1000 * 60 * 60 * 24));
+        }
+
+        function setQuickFilter(type) {
+            activeQuickFilter = type;
+            ['all', 'expired', 'expiring', 'nofile'].forEach(f => {
+                const btn = document.getElementById(`qf-${f}`);
+                if (f === type) {
+                    btn.className = "px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 text-white transition";
+                } else {
+                    btn.className = "px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition";
+                }
+            });
+            onFilterChange();
+        }
+
+        function toggleSort(key) {
+            if (sortKey === key) sortAsc = !sortAsc;
+            else { sortKey = key; sortAsc = true; }
+            renderContracts();
+        }
+
+        function onFilterChange() { currentPage = 1; renderContracts(); }
+        function onPageSizeChange() { pageSize = parseInt(document.getElementById('pageSizeSelect').value); currentPage = 1; renderContracts(); }
+
+        function renderContracts() {
+            const tbody = document.getElementById('contractTable');
+            const emptyState = document.getElementById('emptyState');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filterStatus = document.getElementById('filterStatus').value;
+            const filterYear = document.getElementById('filterYear').value;
+
+            tbody.innerHTML = '';
+
+            let filtered = contracts.filter(item => {
+                const matchesSearch = item.number.toLowerCase().includes(search) || 
+                                     (item.dkCode && item.dkCode.toLowerCase().includes(search)) || 
+                                     item.counterparty.toLowerCase().includes(search);
+                const matchesStatus = filterStatus === 'Усі' || item.status === filterStatus;
+                const matchesYear = filterYear === 'Усі' || (item.startDate && new Date(item.startDate).getFullYear().toString() === filterYear);
+                
+                let matchesQuick = true;
+                const daysLeft = getDaysUntilEnd(item.endDate);
+                if (activeQuickFilter === 'expired') matchesQuick = item.status === 'Діє' && daysLeft !== null && daysLeft < 0;
+                else if (activeQuickFilter === 'expiring') matchesQuick = item.status === 'Діє' && daysLeft !== null && daysLeft >= 0 && daysLeft <= 30;
+                else if (activeQuickFilter === 'nofile') matchesQuick = !item.link || item.link.trim() === '';
+
+                return matchesSearch && matchesStatus && matchesYear && matchesQuick;
+            });
+
+            filtered.sort((a, b) => {
+                let valA = a[sortKey] || '';
+                let valB = b[sortKey] || '';
+                if (sortKey === 'amount') { valA = parseFloat(valA) || 0; valB = parseFloat(valB) || 0; }
+                if (valA < valB) return sortAsc ? -1 : 1;
+                if (valA > valB) return sortAsc ? 1 : -1;
+                return 0;
+            });
+
+            const sumFiltered = filtered.reduce((acc, c) => acc + (parseFloat(c.amount) || 0), 0);
+            document.getElementById('filteredSum').innerText = sumFiltered.toLocaleString('uk-UA', { minimumFractionDigits: 2 }) + ' грн';
+            document.getElementById('resultCountInfo').innerText = `Знайдено: ${filtered.length}`;
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                document.getElementById('paginationBar').classList.add('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+                document.getElementById('paginationBar').classList.remove('hidden');
+            }
+
+            const totalPages = Math.ceil(filtered.length / pageSize);
+            if (currentPage > totalPages) currentPage = totalPages;
+            
+            const startIdx = (currentPage - 1) * pageSize;
+            const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+
+            document.getElementById('pageInfo').innerText = `Сторінка ${currentPage} з ${totalPages || 1}`;
+            document.getElementById('prevPageBtn').disabled = currentPage === 1;
+            document.getElementById('nextPageBtn').disabled = currentPage === totalPages || totalPages === 0;
+
+            pageItems.forEach((item) => {
+                const actualIndex = contracts.indexOf(item);
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-100/60 transition-colors border-b border-slate-100 cursor-pointer';
+                tr.onclick = (e) => {
+                    if (!e.target.closest('button') && !e.target.closest('a')) openDrawer(actualIndex);
+                };
+
+                let statusBadge = '';
+                if (item.status === 'Діє') {
+                    statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Діє</span>`;
+                } else if (item.status === 'На підписанні') {
+                    statusBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">На підписанні</span>`;
+                } else if (item.status === 'Розірвано') {
+                    statusBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">Розірвано</span>`;
+                } else {
+                    statusBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Завершено</span>`;
+                }
+
+                const daysLeft = getDaysUntilEnd(item.endDate);
+                let warningTag = '';
+                let rowBorderClass = '';
+                if (item.status === 'Діє' && daysLeft !== null) {
+                    if (daysLeft < 0) {
+                        warningTag = `<span class="block text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 mt-1"><i class="fa-solid fa-triangle-exclamation"></i> Прострочено</span>`;
+                        rowBorderClass = 'border-l-4 border-l-rose-500';
+                    } else if (daysLeft <= 30) {
+                        warningTag = `<span class="block text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-1"><i class="fa-solid fa-clock"></i> Залишилось: ${daysLeft} дн.</span>`;
+                        rowBorderClass = 'border-l-4 border-l-amber-500';
+                    }
+                }
+                if (rowBorderClass) tr.className += ' ' + rowBorderClass;
+
+                const docLinkHtml = item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs text-sky-600 hover:text-sky-800 font-semibold inline-flex items-center gap-1 ml-1 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-100"><i class="fa-solid fa-paperclip"></i> Файл</a>` : '';
+
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <div class="font-bold text-slate-900">${escapeHtml(item.number)} ${docLinkHtml}</div>
+                        <div class="text-[11px] font-mono font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded inline-block mt-1 border border-emerald-100">
+                            ДК: ${escapeHtml(item.dkCode || '—')}
+                        </div>
+                    </td>
+                    <td class="p-4">
+                        <div class="font-semibold text-slate-800">${escapeHtml(item.counterparty)}</div>
+                        ${item.notes ? `<div class="text-xs text-slate-400 mt-0.5 line-clamp-1">${escapeHtml(item.notes)}</div>` : ''}
+                    </td>
+                    <td class="p-4 font-bold text-slate-900 whitespace-nowrap">
+                        ${Number(item.amount).toLocaleString('uk-UA', { minimumFractionDigits: 2 })} <span class="text-xs font-normal text-slate-500">грн</span>
+                    </td>
+                    <td class="p-4 text-xs text-slate-500 whitespace-nowrap">
+                        <div>з ${formatDate(item.startDate)}</div>
+                        <div>до ${formatDate(item.endDate)}</div>
+                        ${warningTag}
+                    </td>
+                    <td class="p-4">${statusBadge}</td>
+                    <td class="p-4 text-right space-x-1 whitespace-nowrap">
+                        <button onclick="editContract(${actualIndex})" class="text-slate-400 hover:text-emerald-600 p-2 rounded-lg hover:bg-emerald-50 transition" title="Редагувати">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
+                        <button onclick="askDeleteContract(${actualIndex})" class="text-slate-400 hover:text-rose-600 p-2 rounded-lg hover:bg-rose-50 transition" title="Видалити">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openDrawer(index) {
+            const item = contracts[index];
+            document.getElementById('drawerDk').innerText = 'ДК 021:2015: ' + (item.dkCode || '—');
+            document.getElementById('drawerNumber').innerText = item.number;
+            
+            const content = document.getElementById('drawerContent');
+            content.innerHTML = `
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <span class="text-xs font-bold uppercase text-slate-400">Сума договору</span>
+                    <p class="text-2xl font-black text-slate-800 mt-1">${Number(item.amount).toLocaleString('uk-UA', { minimumFractionDigits: 2 })} грн</p>
+                </div>
+                <div>
+                    <span class="text-xs font-bold uppercase text-slate-400">Контрагент</span>
+                    <p class="font-bold text-slate-800 text-base mt-0.5">${escapeHtml(item.counterparty)}</p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-xs font-bold uppercase text-slate-400">Дата початку</span>
+                        <p class="font-semibold text-slate-700 mt-0.5">${formatDate(item.startDate)}</p>
+                    </div>
+                    <div>
+                        <span class="text-xs font-bold uppercase text-slate-400">Закінчення</span>
+                        <p class="font-semibold text-slate-700 mt-0.5">${formatDate(item.endDate)}</p>
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs font-bold uppercase text-slate-400">Статус</span>
+                    <p class="mt-1">${item.status}</p>
+                </div>
+                <div>
+                    <span class="text-xs font-bold uppercase text-slate-400">Файл скан-копії</span>
+                    <p class="mt-1">${item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" class="text-sky-600 font-semibold hover:underline flex items-center gap-1.5"><i class="fa-solid fa-external-link"></i> Відкрити документ</a>` : '<span class="text-slate-400 italic">Файл не додано</span>'}</p>
+                </div>
+                <div>
+                    <span class="text-xs font-bold uppercase text-slate-400">Предмет / Примітка</span>
+                    <p class="mt-1 text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed">${escapeHtml(item.notes || 'Примітки відсутні')}</p>
+                </div>
+                <div class="pt-4 border-t flex gap-2">
+                    <button onclick="editContract(${index}); closeDrawer();" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-pen-to-square"></i> Редагувати
+                    </button>
+                </div>
+            `;
+
+            document.getElementById('drawerOverlay').classList.remove('hidden');
+            document.getElementById('detailDrawer').classList.remove('translate-x-full');
+        }
+
+        function closeDrawer() {
+            document.getElementById('detailDrawer').classList.add('translate-x-full');
+            document.getElementById('drawerOverlay').classList.add('hidden');
+        }
+
+        function changePage(delta) { currentPage += delta; renderContracts(); }
+
+        document.getElementById('contractForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (new Date(endDate) < new Date(startDate)) {
+                showToast('Кінцевий термін не може бути раніше дати початку!', 'error');
+                return;
+            }
+
+            const editIdx = parseInt(document.getElementById('editIndex').value);
+            const contractData = {
+                number: document.getElementById('number').value,
+                dkCode: document.getElementById('dkCode').value.trim(),
+                counterparty: document.getElementById('counterparty').value,
+                amount: parseFloat(document.getElementById('amount').value) || 0,
+                startDate: startDate,
+                endDate: endDate,
+                status: document.getElementById('status').value,
+                link: document.getElementById('link').value,
+                notes: document.getElementById('notes').value
+            };
+
+            if (editIdx >= 0) {
+                contracts[editIdx] = contractData;
+            } else {
+                contracts.push(contractData);
+            }
+
+            saveContractsToGoogleSheets();
+            resetForm();
+        });
+
+        function editContract(index) {
+            const item = contracts[index];
+            document.getElementById('editIndex').value = index;
+            document.getElementById('number').value = item.number;
+            document.getElementById('dkCode').value = item.dkCode || '';
+            document.getElementById('counterparty').value = item.counterparty;
+            document.getElementById('amount').value = item.amount;
+            document.getElementById('startDate').value = item.startDate;
+            document.getElementById('endDate').value = item.endDate;
+            document.getElementById('status').value = item.status;
+            document.getElementById('link').value = item.link || '';
+            document.getElementById('notes').value = item.notes || '';
+
+            document.getElementById('formTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-emerald-600"></i> Редагувати договір';
+            document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-check"></i> Оновити';
+            document.getElementById('cancelBtn').classList.remove('hidden');
+            
+            checkDkLimitLive();
+        }
+
+        function resetForm() {
+            document.getElementById('contractForm').reset();
+            document.getElementById('editIndex').value = '-1';
+            document.getElementById('formTitle').innerHTML = '<i class="fa-solid fa-plus-circle text-emerald-600"></i> Додати новий договір';
+            document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-save"></i> Зберегти';
+            document.getElementById('cancelBtn').classList.add('hidden');
+            document.getElementById('limitAlert').classList.add('hidden');
+        }
+
+        function askDeleteContract(index) {
+            deletingTargetIndex = index;
+            document.getElementById('deleteModal').classList.remove('hidden');
+        }
+
+        function closeDeleteModal() {
+            deletingTargetIndex = -1;
+            document.getElementById('deleteModal').classList.add('hidden');
+        }
+
+        document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+            if (deletingTargetIndex >= 0) {
+                contracts.splice(deletingTargetIndex, 1);
+                saveContractsToGoogleSheets();
+                closeDeleteModal();
+            }
+        });
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length < 3) return dateStr;
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+
+        function escapeHtml(text) {
+            return String(text).replace(/[&<>"']/g, function(m) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+            });
+        }
+
+        function exportToCSV() {
+            if (contracts.length === 0) {
+                showToast('Немає даних для експорту', 'info');
+                return;
+            }
+            let csvContent = "\uFEFFНомер;Код ДК;Контрагент;Сума;Дата початку;Дата закінчення;Статус;Посилання;Примітка\n";
+            contracts.forEach(c => {
+                csvContent += `"${c.number}";"${c.dkCode}";"${c.counterparty}";"${c.amount}";"${c.startDate}";"${c.endDate}";"${c.status}";"${c.link || ''}";"${c.notes || ''}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `Dogovory_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('Файл CSV згенеровано');
+        }
+
+        // Автоматичне завантаження даних при відкритті сайту
+        loadFromGoogleSheets();
+    </script>
+</body>
+</html>
